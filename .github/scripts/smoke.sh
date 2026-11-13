@@ -36,6 +36,7 @@ export ASPNETCORE_Kestrel__Certificates__Default__Path="$task_dir/cert.pfx"
 export ASPNETCORE_Kestrel__Certificates__Default__Password="$certificate_password"
 export SSL_CERT_FILE="$task_dir/cert.pem"
 export AllowedHosts=localhost
+export ConfigurationCache__Enabled=true
 
 api_dll="$task_root/src/SecureProxy/bin/Release/net8.0/SecureProxy.dll"
 mock_dll="$task_root/mock/MockDestination/bin/Release/net8.0/MockDestination.dll"
@@ -64,7 +65,8 @@ request() {
     -H "X-Api-Key: $ProxyApiKey" -H 'Content-Type: application/json' \
     -D "$task_dir/headers.txt" -o "$task_dir/response.json" -w '%{http_code}' \
     --data "$body" "$api/api/proxy/execute")"
-  if [[ "$actual" != "$expected" ]]; then
+  last_status="$actual"
+  if [[ "|$expected|" != *"|$actual|"* ]]; then
     printf 'Expected HTTP %s, received %s\n' "$expected" "$actual"
     cat "$task_dir/response.json"
     exit 1
@@ -107,7 +109,13 @@ sql() {
   docker exec -i "$sql_container" /opt/mssql-tools18/bin/sqlcmd -S localhost \
     -U sa -P "$MSSQL_SA_PASSWORD" -C -b -d ProxySmoke "$@"
 }
+sql -Q "DELETE FROM CallerOperationGrants WHERE CallerId=N'local-demo';"
+request 403 "$valid"
+assert_count 1
+sql -Q "INSERT INTO CallerOperationGrants (CallerId, OperationId) SELECT N'local-demo', Id FROM Operations WHERE [Key]=N'customer.get';"
 sql < "$task_root/docs/enable-demo-encryption.sql"
+curl --silent --show-error --fail --cacert "$task_dir/cert.pem" -X POST \
+  -H "X-Api-Key: $AdminApiKey" "$api/api/admin/configuration-cache/invalidate"
 request 400 "$valid"
 assert_count 1
 encrypted="$(pwsh -NoProfile -File "$task_root/scripts/Encrypt-Payload.ps1" -ClientId customer.get -Json '{"urlId":1,"id":12}')"
@@ -120,10 +128,19 @@ assert_count 2
 kill "$mock_pid"
 wait "$mock_pid" 2>/dev/null || true
 mock_pid=""
-request 502 "$encrypted"
+# Earlier successes may expire from the sampling window on a slow runner.
+for attempt in {1..6}; do
+  request '502|503' "$encrypted"
+  if [[ "$last_status" == 503 ]]; then break; fi
+done
+[[ "$last_status" == 503 ]]
+request 503 "$encrypted"
 sql -Q "SET NOCOUNT ON;
 IF NOT EXISTS (SELECT 1 FROM ExecutionLogs WHERE Outcome=N'Succeeded' AND Forwarded=1 AND UpstreamStatus=200 AND CompletedAt IS NOT NULL) THROW 51000, 'Missing success audit', 1;
 IF NOT EXISTS (SELECT 1 FROM ExecutionLogs WHERE Outcome=N'Rejected' AND Forwarded=0 AND ProxyStatus=400 AND CompletedAt IS NOT NULL) THROW 51000, 'Missing rejection audit', 1;
 IF NOT EXISTS (SELECT 1 FROM ExecutionLogs WHERE Outcome=N'Failed' AND ProxyStatus=502 AND Reason=N'upstream_connection_failed') THROW 51000, 'Missing failure audit', 1;
+IF NOT EXISTS (SELECT 1 FROM ExecutionLogs WHERE Reason=N'operation_not_permitted' AND CallerId=N'local-demo' AND Forwarded=0) THROW 51000, 'Missing permission rejection', 1;
+IF NOT EXISTS (SELECT 1 FROM ExecutionLogs WHERE Reason=N'upstream_circuit_open' AND Forwarded=0 AND ProxyStatus=503) THROW 51000, 'Missing circuit rejection', 1;
+IF EXISTS (SELECT 1 FROM ConfigurationChanges WHERE ActorId <> N'local-admin') THROW 51000, 'Missing history actor', 1;
 IF (SELECT COUNT(*) FROM ConfigurationChanges) <> 2 THROW 51000, 'Incorrect configuration history', 1;"
-printf 'SQL-backed HTTPS smoke passed: forwarding, blocked requests, rowversion, AES-GCM, connection failure and persisted audit.\n'
+printf 'SQL-backed HTTPS smoke passed: forwarding, caller grants, cache invalidation, rowversion, AES-GCM, circuit breaking and persisted audit.\n'

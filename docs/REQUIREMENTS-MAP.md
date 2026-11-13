@@ -1,6 +1,6 @@
 # Assessment requirements and evidence
 
-Reviewed against every section of docs/assignment.md. All 67 automated tests, including the two SQL Server integration tests, passed in GitHub Actions. The standalone SQL-backed HTTPS smoke check also passed. See [VERIFICATION.md](VERIFICATION.md) for the run and evidence.
+Reviewed against every section of docs/assignment.md. The expanded local suite passes 96 tests; two SQL tests await the new CI run. The previous 67-test SQL suite and standalone HTTPS check passed in GitHub Actions. See [VERIFICATION.md](VERIFICATION.md) for the recorded revision and evidence.
 
 ## Functional, data and reliability requirements
 
@@ -9,27 +9,43 @@ Reviewed against every section of docs/assignment.md. All 67 automated tests, in
 | 1-3: Backend-only, configured permitted operations | ASP.NET Core application; callers select clientId only; no unrestricted forwarding endpoint | Implemented |
 | 4: POST /api/proxy/execute | Program endpoint; HttpTests successful and rejected HTTP requests | Verified |
 | 4: Envelope then operation lookup then urlId/policies | Closed-envelope parse in ProxyExecutor; RequestPolicy validates destination ID before dispatch | Verified |
-| 4: Failed pre-forward checks never reach destination | Recording-handler zero-call assertions; real HTTPS traversal request does not increase destination count | Verified |
+| 4: Failed pre-forward checks never reach destination | Recording-handler zero-call assertions; real HTTPS traversal request doesn't increase destination count | Verified |
 | 5.1: Destination fields | Destination stores ID/name/base URL/state/timeout/permitted port/timestamps; context stamps tracked updates | Verified, including SQL persistence |
 | 5.2: Operation fields and trusted routing | Operation stores key/destination/method/path/state/size/encryption/profile/rowversion; caller overrides rejected | Verified, including real SQL rowversion |
 | 5.3: Parameter types, required/optional, length/range/location | ParameterRule and RequestPolicy; path/query/body/optional/type/range/unknown tests | Verified |
 | 5.4: Header allowlist | Configured AND hard allowlist; dynamic Connection names excluded; no credentials/cookies/Host | Verified |
 | 5.5: Encryption references and secure key source | EncryptionProfile, IKeySource, environment-backed AES-256 key source; no key bytes in SQL | Verified with valid/invalid encryption and missing/invalid keys |
-| 5.6: Execution metadata | ExecutionLog stores correlation/known key/destination/times/duration/dispatch/status/outcome/reason | Verified with SQL persistence and the standalone smoke run |
-| 5.7: Configuration history | Atomic enabled-state change/history, previous version/time; direct SQL audit policy documented | Enabled-state history and transaction behavior verified in SQL |
+| 5.6: Execution metadata | ExecutionLog stores correlation/known caller/trace/key/destination/times/duration/dispatch/status/outcome/reason | SQL persistence tests and standalone smoke assertions |
+| 5.7: Configuration history | Atomic enabled-state change/history, previous version/time/authenticated actor; direct SQL audit policy documented | Unit cache/actor test, SQL concurrency test and smoke assertions |
 | 6: Timeouts and cancellation | Destination deadline covers send/body; caller token propagated; distinct 504/499 | Verified |
 | 6: HTTP client lifecycle | Named IHttpClientFactory + pooled SocketsHttpHandler | Exercised through real HTTPS test |
 | 6: Streaming and size bounds | Hard/per-operation request limits; bounded chunk reads; response cap with/without Content-Length | Verified; bounded buffering trade-off documented |
 | 6: Retries/idempotency | No retries; safe-retry constraints and upstream deduplication explained | Addressed in README/DESIGN-NOTES |
-| 6: Caching/consistency | No cache; fresh query; already loaded requests may finish after disable | Explicit consistency model documented |
+| 6: Caching/consistency | Optional bounded cache, off by default; absolute TTL, local post-commit invalidation, stale-load generation check; grants always fresh | ResilienceAndCacheTests; cached configuration/grant revocation test; cross-instance and in-flight semantics documented |
 | 6: Concurrency | SQL rowversion, original-version predicate and 409; stale-token unit test | Verified by unit tests, a real SQL race and the standalone API run |
-| 6: Resilience | 32-request concurrency cap/no queue, bounded connections, no retries; circuit breaking discussed | Saturation test verifies 33rd request is blocked |
+| 6: Resilience | Per-caller fixed-window quota, shared bounded concurrency, per-destination Polly circuit, no retries | Quota/saturation tests; fake-clock opening, isolation and recovery tests; audited no-dispatch circuit rejection |
 | 7: Safe and distinct errors | Proxy codes/correlation, upstream status/source, sanitized error bodies; client binding errors preserve 4xx | Verified; missing destination defensively rejected by policy |
-| 8: Structured logging and audit policy | Metadata-only logs, mandatory admission, dispatch intent, independent completion, explicit outage policy | Success/rejection/failure/outage tests verified |
+| 8: Structured logging and audit policy | JSON console metadata, correlation/trace IDs, metrics, execution spans, mandatory admission, dispatch intent and independent completion | HTTP metric/trace test; success/rejection/failure/outage tests; ingress and execution audit boundaries documented |
 | 8: SQL unavailable during audit | Admission failure prevents dispatch; post-dispatch failure returns 503 and leaves intent; reconciliation documented | Failure injection verified; mandatory-audit outage policy documented |
 | 14: AI usage | AI-USAGE describes tools and their contributions | Documented |
+| 14: Security/reliability trade-offs | Explicit benefit/cost table in DESIGN-NOTES; SQL availability, cache freshness, memory, retries, JWT and in-flight revocation | Documented against implemented behavior |
 
 SQL Server is the configured persistence provider. Operational settings are represented by destination timeout/port and operation size/policy fields; there is no separate arbitrary settings table or general configuration editor.
+
+## Optional scope
+
+| Optional item | Decision and evidence |
+|---|---|
+| Destination-specific settings | Permitted port is enforced; no upstream authentication profile is needed for the supplied mock. Secrets can't be supplied by callers. |
+| Header rules | Implemented as a configured allowlist intersected with a hard safety allowlist. |
+| Encryption profiles | Implemented with AES-GCM, references and a replaceable key-source abstraction; plaintext remains supported where configured. |
+| Configuration history | Implemented for the exposed enabled-state update, including actor; direct SQL and grants use the documented operator-audit policy. |
+| Configuration caching | Implemented and tested, disabled by default until measurements justify accepting stale policy. |
+| Resilience discussion or implementation | All three mechanisms are implemented: quotas, concurrency and destination circuits. No automatic retries. |
+| Caller identities and permissions | JWT support and explicit SQL operation grants are implemented beyond the core assessment; a live provider requires deployment configuration. |
+| Additional observability | Metrics, execution spans and protected SQL readiness are implemented. A collector and alerting service are deployment tasks. |
+
+The assignment doesn't name a separate bonus section. Its optional choices are covered above; a full admin editor, hosted identity service and monitoring stack would add services beyond this backend assessment.
 
 ## All 17 required automated tests
 
@@ -53,7 +69,7 @@ SQL Server is the configured persistence provider. Operational settings are repr
 | 16 | Configuration concurrency conflicts | Stale_configuration_returns_conflict_without_forwarding; Real_SQL_rowversion_rejects_stale_writer_and_records_history_atomically |
 | 17 | Successful/rejected audit | Valid operation and rejection tests; audit admission/dispatch/completion outage tests; Real_SQL_persists_success_and_rejection_audits |
 
-Every pre-forward rejection case in executor tests checks an empty recording handler. HTTP rejection tests also check the injected recorder; the concurrency test proves the rejected request does not add a 33rd destination call. The missing-destination defensive policy test checks the error and no calls; a missing SQL destination normally cannot exist because of the foreign key. NetworkTests checks the actual server request count before/after rejected traversal. A gateway failure after dispatch is distinguished from a pre-forward rejection and correctly expects a destination attempt.
+Every pre-forward rejection case in executor tests checks an empty recording handler. HTTP rejection tests also check the injected recorder; the concurrency test proves the rejected request doesn't add a 33rd destination call. The missing-destination defensive policy test checks the error and no calls; a missing SQL destination normally cannot exist because of the foreign key. NetworkTests checks the actual server request count before/after rejected traversal. A gateway failure after dispatch is distinguished from a pre-forward rejection and correctly expects a destination attempt.
 
 ## Submission deliverables
 
@@ -70,4 +86,4 @@ Every pre-forward rejection case in executor tests checks an empty recording han
 
 ## Submission status
 
-The repository is public, SQL integration and standalone smoke checks pass in CI, and the Word document includes the repository URL. LocalDB remains an optional Windows setup choice and requires administrator rights to install. Production limitations are covered in DESIGN-NOTES.md.
+The repository is public and the Word document includes its URL. [VERIFICATION.md](VERIFICATION.md) identifies the latest validated revision. LocalDB remains an optional Windows setup choice and requires administrator rights to install. Deployment responsibilities are covered in DESIGN-NOTES.md.

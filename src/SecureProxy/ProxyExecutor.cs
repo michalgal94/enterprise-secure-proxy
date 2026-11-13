@@ -1,22 +1,30 @@
 using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Polly.CircuitBreaker;
 
 namespace SecureProxy;
 
 public sealed record ProxyReply(int Status, byte[] Body, string ContentType, bool Upstream);
-public sealed class ProxyExecutor(ProxyDb db, RequestPolicy policy, IHttpClientFactory clients, ILogger<ProxyExecutor> logger)
+public sealed class ProxyExecutor(ProxyDb db, RequestPolicy policy, IHttpClientFactory clients, ILogger<ProxyExecutor> logger, OperationCatalog catalog, DestinationCircuitBreaker circuit)
 {
-    public async Task<ProxyReply> ExecuteAsync(Stream input, string? contentType, IHeaderDictionary headers, string correlationId, CancellationToken cancellation)
+    public async Task<ProxyReply> ExecuteAsync(Stream input, string? contentType, IHeaderDictionary headers, string correlationId, CancellationToken cancellation, string callerSubject = "local-demo")
     {
-        var audit = new ExecutionLog { CorrelationId = correlationId };
+        using var activity = ProxyTelemetry.Activities.StartActivity("proxy.execute", ActivityKind.Internal);
+        activity?.SetTag("proxy.correlation_id", correlationId);
+        var audit = new ExecutionLog { CorrelationId = correlationId, TraceId = Activity.Current?.TraceId.ToString() };
         var watch = Stopwatch.StartNew();
         // A durable intent is mandatory before any network side effect.
         db.ExecutionLogs.Add(audit);
         using var admissionDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         try { await db.SaveChangesAsync(admissionDeadline.Token); }
         catch (Exception ex)
-        { logger.LogError("Audit admission failed {CorrelationId} {FailureType}", correlationId, ex.GetType().Name); return Error(503, "audit_unavailable", correlationId); }
+        {
+            logger.LogError("Audit admission failed {CorrelationId} {FailureType}", correlationId, ex.GetType().Name);
+            audit.ProxyStatus = 503; audit.Outcome = "AuditUnavailable"; audit.DurationMs = watch.ElapsedMilliseconds;
+            ProxyTelemetry.Record(audit);
+            return Error(503, "audit_unavailable", correlationId);
+        }
         ProxyReply result;
         try
         {
@@ -28,12 +36,19 @@ public sealed class ProxyExecutor(ProxyDb db, RequestPolicy policy, IHttpClientF
             foreach (var p in doc.RootElement.EnumerateObject())
                 if (!names.Add(p.Name) || p.Name is not ("clientId" or "json" or "encrypted")) throw new ProxyFault(400, "invalid_envelope");
             var request = JsonSerializer.Deserialize<ExecuteRequest>(raw, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }) ?? throw new ProxyFault(400, "invalid_envelope");
-            if (string.IsNullOrWhiteSpace(request.ClientId) || request.ClientId.Length > 128 || !System.Text.RegularExpressions.Regex.IsMatch(request.ClientId, "^[a-zA-Z0-9._-]+$")) throw new ProxyFault(400, "invalid_envelope");
+            if (string.IsNullOrWhiteSpace(request.ClientId) || request.ClientId.Length > 128 || !System.Text.RegularExpressions.Regex.IsMatch(request.ClientId, "\\A[a-zA-Z0-9._-]+\\z")) throw new ProxyFault(400, "invalid_envelope");
             // Record only a known, trusted operation key, never arbitrary caller text.
-            var op = await db.Operations.AsNoTracking().AsSingleQuery().Include(x => x.Destination).Include(x => x.Parameters).Include(x => x.Headers).Include(x => x.EncryptionProfile)
-                .SingleOrDefaultAsync(x => x.Key == request.ClientId, cancellation) ?? throw new ProxyFault(404, "unknown_operation");
+            var op = await catalog.FindAsync(request.ClientId, cancellation) ?? throw new ProxyFault(404, "unknown_operation");
             audit.OperationKey = op.Key;
             audit.DestinationId = op.DestinationId;
+            var caller = await db.Callers.AsNoTracking().SingleOrDefaultAsync(x => x.Id == callerSubject, cancellation);
+            // SQL equality can ignore trailing spaces; identity subjects must match exactly.
+            if (caller is not null && !StringComparer.Ordinal.Equals(caller.Id, callerSubject)) caller = null;
+            audit.CallerId = caller?.Id;
+            if (caller is not { Enabled: true } || !await db.CallerOperationGrants.AnyAsync(x => x.CallerId == callerSubject && x.OperationId == op.Id, cancellation))
+                throw new ProxyFault(403, "operation_not_permitted");
+            activity?.SetTag("proxy.operation", op.Key);
+            activity?.SetTag("proxy.destination_id", op.DestinationId);
             var prepared = policy.Prepare(op, request);
             if (raw.Length > op.MaxRequestBytes) throw new ProxyFault(413, "request_too_large");
             using var message = new HttpRequestMessage(prepared.Method, prepared.Uri);
@@ -52,21 +67,29 @@ public sealed class ProxyExecutor(ProxyDb db, RequestPolicy policy, IHttpClientF
             await db.SaveChangesAsync(cancellation);
             try
             {
-                deadline.Token.ThrowIfCancellationRequested();
-                audit.Forwarded = true; // Send invoked/attempted, not proof of upstream receipt.
-                using var response = await clients.CreateClient("upstream").SendAsync(message, HttpCompletionOption.ResponseHeadersRead, deadline.Token);
-                audit.UpstreamStatus = (int)response.StatusCode;
-                if (response.Content.Headers.ContentLength > op.MaxResponseBytes) throw new ProxyFault(502, "response_too_large");
-                await using var stream = await response.Content.ReadAsStreamAsync(deadline.Token);
-                var bytes = await ReadBoundedAsync(stream, op.MaxResponseBytes, deadline.Token, 502);
-                result = response.IsSuccessStatusCode
-                    ? new((int)response.StatusCode, bytes, SafeContentType(response.Content.Headers.ContentType?.MediaType), true)
-                    : new((int)response.StatusCode, JsonSerializer.SerializeToUtf8Bytes(new { code = "upstream_response", correlationId }), "application/json", true);
-                audit.Outcome = response.IsSuccessStatusCode ? "Succeeded" : "UpstreamError";
-                if (!response.IsSuccessStatusCode) audit.Reason = "upstream_http_error";
+                result = await circuit.ExecuteAsync(op.DestinationId, async token =>
+                {
+                    try
+                    {
+                        token.ThrowIfCancellationRequested();
+                        audit.Forwarded = true;
+                        using var response = await clients.CreateClient("upstream").SendAsync(message, HttpCompletionOption.ResponseHeadersRead, token);
+                        audit.UpstreamStatus = (int)response.StatusCode;
+                        if (response.Content.Headers.ContentLength > op.MaxResponseBytes) throw new ProxyFault(502, "response_too_large");
+                        await using var stream = await response.Content.ReadAsStreamAsync(token);
+                        var bytes = await ReadBoundedAsync(stream, op.MaxResponseBytes, token, 502);
+                        audit.Outcome = response.IsSuccessStatusCode ? "Succeeded" : "UpstreamError";
+                        if (!response.IsSuccessStatusCode) audit.Reason = "upstream_http_error";
+                        return response.IsSuccessStatusCode
+                            ? new ProxyReply((int)response.StatusCode, bytes, SafeContentType(response.Content.Headers.ContentType?.MediaType), true)
+                            : new ProxyReply((int)response.StatusCode, JsonSerializer.SerializeToUtf8Bytes(new { code = "upstream_response", correlationId }), "application/json", true);
+                    }
+                    catch (OperationCanceledException) when (!cancellation.IsCancellationRequested) { throw new ProxyFault(504, "upstream_timeout"); }
+                }, deadline.Token);
             }
             catch (OperationCanceledException) when (!cancellation.IsCancellationRequested) { throw new ProxyFault(504, "upstream_timeout"); }
         }
+        catch (BrokenCircuitException) { audit.Reason = "upstream_circuit_open"; audit.Outcome = "Rejected"; result = Error(503, "upstream_circuit_open", correlationId); }
         catch (ProxyFault f) { audit.Reason = f.Code; audit.Outcome = audit.Forwarded ? "Failed" : "Rejected"; result = Error(f.Status, f.Code, correlationId); }
         catch (JsonException) { audit.Reason = "invalid_json"; audit.Outcome = "Rejected"; result = Error(400, "invalid_json", correlationId); }
         catch (BadHttpRequestException ex) { audit.Reason = "invalid_http_request"; audit.Outcome = "Rejected"; result = Error(ex.StatusCode, "invalid_http_request", correlationId); }
@@ -91,8 +114,12 @@ public sealed class ProxyExecutor(ProxyDb db, RequestPolicy policy, IHttpClientF
         catch (Exception ex)
         {
             logger.LogCritical("Audit completion failed {CorrelationId} {FailureType}", correlationId, ex.GetType().Name);
+            audit.ProxyStatus = 503; audit.Outcome = "AuditCompletionFailed"; ProxyTelemetry.Record(audit);
             return Error(503, "audit_completion_failed", correlationId);
         }
+        ProxyTelemetry.Record(audit);
+        activity?.SetTag("proxy.outcome", audit.Outcome);
+        if (result.Status >= 400) activity?.SetStatus(ActivityStatusCode.Error, audit.Reason);
         logger.LogInformation("Proxy execution {CorrelationId} {Outcome} {Status} {DurationMs}", correlationId, audit.Outcome, result.Status, audit.DurationMs);
         return result;
     }

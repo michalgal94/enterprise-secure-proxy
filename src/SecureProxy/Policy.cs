@@ -28,7 +28,8 @@ public sealed class RequestPolicy(IKeySource keys)
     public PreparedRequest Prepare(Operation op, ExecuteRequest envelope)
     {
         if (!op.Enabled) throw new ProxyFault(403, "operation_disabled");
-        if (op.Destination is not { Enabled: true } d) throw new ProxyFault(403, "destination_disabled");
+        if (op.Destination is not { } d) throw new ProxyFault(503, "destination_unavailable");
+        if (!d.Enabled) throw new ProxyFault(403, "destination_disabled");
         if (!Methods.Contains(op.Method)) throw new ProxyFault(503, "invalid_configuration");
         if (op.MaxRequestBytes is < 1 or > 1048576 || op.MaxResponseBytes is < 1 or > 8388608 || d.TimeoutSeconds is < 1 or > 120)
             throw new ProxyFault(503, "invalid_configuration");

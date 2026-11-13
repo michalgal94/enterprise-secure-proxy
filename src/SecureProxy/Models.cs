@@ -65,6 +65,8 @@ public sealed class ExecutionLog
     public Guid Id { get; set; } = Guid.NewGuid();
     public string CorrelationId { get; set; } = "";
     public string? OperationKey { get; set; }
+    public string? CallerId { get; set; }
+    public string? TraceId { get; set; }
     public int? DestinationId { get; set; }
     public DateTimeOffset StartedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? CompletedAt { get; set; }
@@ -82,6 +84,20 @@ public sealed class ConfigurationChange
     public DateTimeOffset ChangedAt { get; set; } = DateTimeOffset.UtcNow;
     public bool Enabled { get; set; }
     public string PreviousVersion { get; set; } = "";
+    public string ActorId { get; set; } = "";
+}
+public sealed class Caller
+{
+    public string Id { get; set; } = "";
+    public bool Enabled { get; set; } = true;
+    public List<CallerOperationGrant> Grants { get; set; } = [];
+}
+public sealed class CallerOperationGrant
+{
+    public string CallerId { get; set; } = "";
+    public Caller Caller { get; set; } = null!;
+    public int OperationId { get; set; }
+    public Operation Operation { get; set; } = null!;
 }
 public sealed class ProxyDb(DbContextOptions<ProxyDb> options) : DbContext(options)
 {
@@ -92,6 +108,8 @@ public sealed class ProxyDb(DbContextOptions<ProxyDb> options) : DbContext(optio
     public DbSet<EncryptionProfile> EncryptionProfiles => Set<EncryptionProfile>();
     public DbSet<ExecutionLog> ExecutionLogs => Set<ExecutionLog>();
     public DbSet<ConfigurationChange> ConfigurationChanges => Set<ConfigurationChange>();
+    public DbSet<Caller> Callers => Set<Caller>();
+    public DbSet<CallerOperationGrant> CallerOperationGrants => Set<CallerOperationGrant>();
     private void UpdateDestinationTimestamps()
     {
         foreach (var entry in ChangeTracker.Entries<Destination>().Where(x => x.State is EntityState.Added or EntityState.Modified))
@@ -114,6 +132,14 @@ public sealed class ProxyDb(DbContextOptions<ProxyDb> options) : DbContext(optio
     }
     protected override void OnModelCreating(ModelBuilder b)
     {
+        b.Entity<Caller>().HasKey(x => x.Id);
+        b.Entity<Caller>().Property(x => x.Id).HasMaxLength(128).UseCollation("Latin1_General_100_BIN2");
+        b.Entity<CallerOperationGrant>().HasKey(x => new { x.CallerId, x.OperationId });
+        b.Entity<CallerOperationGrant>().Property(x => x.CallerId).HasMaxLength(128).UseCollation("Latin1_General_100_BIN2");
+        b.Entity<CallerOperationGrant>().HasOne(x => x.Caller).WithMany(x => x.Grants).HasForeignKey(x => x.CallerId);
+        b.Entity<ExecutionLog>().Property(x => x.CallerId).HasMaxLength(128);
+        b.Entity<ExecutionLog>().Property(x => x.TraceId).HasMaxLength(32);
+        b.Entity<ConfigurationChange>().Property(x => x.ActorId).HasMaxLength(128);
         b.Entity<Operation>().HasIndex(x => x.Key).IsUnique();
         b.Entity<Operation>().Property(x => x.Key).HasMaxLength(128);
         b.Entity<ParameterRule>().HasIndex(x => new { x.OperationId, x.Name }).IsUnique();

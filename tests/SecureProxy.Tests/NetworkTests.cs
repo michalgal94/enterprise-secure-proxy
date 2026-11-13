@@ -81,6 +81,7 @@ public sealed class NetworkTests
             var destination = new Destination { Name = "TLS mock", Enabled = true, BaseUrl = upstream.Urls.Single() + "/", PermittedPort = new Uri(upstream.Urls.Single()).Port };
             db.Operations.Add(new() { Key = "network", Enabled = true, Path = "customers/{id}", Destination = destination, Parameters = [new() { Name = "id", Type = "string", Required = true, Location = "path" }] });
             db.Operations.Add(new() { Key = "redirect", Enabled = true, Path = "redirect", Destination = destination });
+            db.Callers.Add(new Caller { Id = "local-demo", Grants = db.ChangeTracker.Entries<Operation>().Select(x => new CallerOperationGrant { Operation = x.Entity }).ToList() });
             await db.SaveChangesAsync();
         }
         using var client = factory.CreateClient(new() { BaseAddress = new("https://localhost"), AllowAutoRedirect = false });

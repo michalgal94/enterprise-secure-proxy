@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging.Abstractions;
 using SecureProxy;
 using Xunit;
@@ -83,23 +84,25 @@ public sealed class ExecutionTests
         public ProxyDb Db { get; }
         public Recorder Handler { get; } = new();
         public Operation Op { get; }
+        private readonly ConfigurationCache cache = new(Options.Create(new ConfigurationCacheOptions()), TimeProvider.System);
+        public DestinationCircuitBreaker Circuit { get; } = new(Options.Create(new ProxyResilienceOptions()), TimeProvider.System, NullLogger<DestinationCircuitBreaker>.Instance);
         public Fixture(SaveChangesInterceptor? interceptor = null)
         {
             var options = new DbContextOptionsBuilder<ProxyDb>().UseInMemoryDatabase(Guid.NewGuid().ToString());
             if (interceptor is not null) options.AddInterceptors(interceptor);
             Db = new(options.Options);
             Op = new() { Key = "customer.get", Enabled = true, Method = "GET", Path = "customers/{id}", Destination = new() { Name = "mock", BaseUrl = "https://trusted.example/api/", Enabled = true }, Parameters = [new() { Name = "id", Type = "integer", Required = true, Location = "path", Minimum = 1 }] };
-            Db.Add(Op); Db.SaveChanges();
+            Db.Callers.Add(new Caller { Id = "local-demo", Grants = [new() { Operation = Op }] }); Db.SaveChanges();
         }
         public async Task<ProxyReply> Send(string? json = null, string contentType = "application/json", IHeaderDictionary? headers = null, CancellationToken cancellation = default)
         {
             await Db.SaveChangesAsync();
             var input = json ?? $$$"""{"clientId":"customer.get","json":{"urlId":{{{Op.DestinationId}}},"id":12}}""";
-            return await new ProxyExecutor(Db, new RequestPolicy(new Keys()), Handler, NullLogger<ProxyExecutor>.Instance)
+            return await new ProxyExecutor(Db, new RequestPolicy(new Keys()), Handler, NullLogger<ProxyExecutor>.Instance, new OperationCatalog(Db, cache), Circuit)
                 .ExecuteAsync(new MemoryStream(Encoding.UTF8.GetBytes(input)), contentType, headers ?? new HeaderDictionary(), Guid.NewGuid().ToString("N"), cancellation);
         }
         public string Envelope(string parameters) => $$$"""{"clientId":"customer.get","json":{"urlId":{{{Op.DestinationId}}},{{{parameters}}}}}""";
-        public void Dispose() => Db.Dispose();
+        public void Dispose() { cache.Dispose(); Db.Dispose(); }
     }
     private sealed class AuditFailure(bool admission) : SaveChangesInterceptor
     {
@@ -272,7 +275,7 @@ public sealed class ExecutionTests
         using var f = new Fixture(); f.Op.Destination = null!;
         using var json = JsonDocument.Parse("{\"urlId\":1,\"id\":12}");
         var fault = Assert.Throws<ProxyFault>(() => new RequestPolicy(new Keys()).Prepare(f.Op, new(f.Op.Key, json.RootElement)));
-        Assert.Equal(403, fault.Status); Assert.Empty(f.Handler.Received);
+        Assert.Equal(503, fault.Status); Assert.Empty(f.Handler.Received);
     }
     [Fact] public async Task Connection_failure_returns_502()
     {
@@ -296,5 +299,14 @@ public sealed class ExecutionTests
         using var f = new Fixture(); f.Op.Version = new byte[8]; await f.Db.SaveChangesAsync();
         var result = await ConfigurationAdmin.SetEnabledAsync(f.Db, f.Op.Key, new(false, Convert.ToBase64String(Enumerable.Repeat((byte)1, 8).ToArray())), default);
         Assert.Equal(409, ((IStatusCodeHttpResult)result).StatusCode); Assert.True(f.Op.Enabled); Assert.Empty(f.Handler.Received); Assert.Empty(f.Db.ConfigurationChanges);
+    }
+    [Fact] public async Task Open_circuit_is_audited_without_claiming_or_attempting_dispatch()
+    {
+        using var f = new Fixture();
+        f.Handler.Respond = _ => throw new HttpRequestException("unavailable");
+        for (var i = 0; i < 5; i++) Assert.Equal(502, (await f.Send()).Status);
+        var rejected = await f.Send(); Assert.Equal(503, rejected.Status); Assert.Equal(5, f.Handler.Received.Count);
+        var audit = f.Db.ExecutionLogs.Single(x => x.Reason == "upstream_circuit_open");
+        Assert.False(audit.Forwarded); Assert.Equal("Rejected", audit.Outcome);
     }
 }

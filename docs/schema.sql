@@ -213,3 +213,83 @@ GO
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+GO
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261113190502_CallerAccessAndAuditIdentity'
+)
+BEGIN
+    ALTER TABLE [ExecutionLogs] ADD [CallerId] nvarchar(128) NULL;
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261113190502_CallerAccessAndAuditIdentity'
+)
+BEGIN
+    ALTER TABLE [ExecutionLogs] ADD [TraceId] nvarchar(32) NULL;
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261113190502_CallerAccessAndAuditIdentity'
+)
+BEGIN
+    ALTER TABLE [ConfigurationChanges] ADD [ActorId] nvarchar(128) NOT NULL DEFAULT N'';
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261113190502_CallerAccessAndAuditIdentity'
+)
+BEGIN
+    CREATE TABLE [Callers] (
+        [Id] nvarchar(128) COLLATE Latin1_General_100_BIN2 NOT NULL,
+        [Enabled] bit NOT NULL,
+        CONSTRAINT [PK_Callers] PRIMARY KEY ([Id])
+    );
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261113190502_CallerAccessAndAuditIdentity'
+)
+BEGIN
+    CREATE TABLE [CallerOperationGrants] (
+        [CallerId] nvarchar(128) COLLATE Latin1_General_100_BIN2 NOT NULL,
+        [OperationId] int NOT NULL,
+        CONSTRAINT [PK_CallerOperationGrants] PRIMARY KEY ([CallerId], [OperationId]),
+        CONSTRAINT [FK_CallerOperationGrants_Callers_CallerId] FOREIGN KEY ([CallerId]) REFERENCES [Callers] ([Id]) ON DELETE CASCADE,
+        CONSTRAINT [FK_CallerOperationGrants_Operations_OperationId] FOREIGN KEY ([OperationId]) REFERENCES [Operations] ([Id]) ON DELETE CASCADE
+    );
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261113190502_CallerAccessAndAuditIdentity'
+)
+BEGIN
+    CREATE INDEX [IX_CallerOperationGrants_OperationId] ON [CallerOperationGrants] ([OperationId]);
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261113190502_CallerAccessAndAuditIdentity'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261113190502_CallerAccessAndAuditIdentity', N'8.0.34');
+END;
+GO
+
+COMMIT;
+GO
+

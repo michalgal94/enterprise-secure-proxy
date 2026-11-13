@@ -25,7 +25,7 @@ paragraphs = [
     ('Only trusted configuration determines URL, HTTP method and path. json.urlId must match the configured destination ID. All validation and AES-GCM authentication precede forwarding. Redirects, cookie forwarding, automatic retries and unrestricted header propagation are disabled.', False),
     ('Audit intent is mandatory before dispatch. Post-dispatch audit failure cannot undo an upstream side effect. Rowversion protects the enabled-state management endpoint. In-flight requests may complete after configuration is disabled.', False),
     ('Verification and handoff', True),
-    ('All 67 tests passed with no skips in GitHub Actions against SQL Server 2022. The standalone API and mock HTTPS run with SQL also passed. See docs/VERIFICATION.md for the run and results.', False),
+    ('docs/VERIFICATION.md records the exact tested revision, automated test counts and SQL-backed standalone HTTPS results. The GitHub workflow runs the complete suite with SQL Server 2022.', False),
     ('The public repository contains the complete solution and documentation. Follow README.md for local setup; use the GitHub Actions run linked in docs/VERIFICATION.md for SQL verification evidence. LocalDB is an optional Windows database engine and needs administrator rights to install.', False),
     ('AI disclosure', True),
     ('OpenAI Codex was used for planning, code, tests and documentation. AI-USAGE.md describes its contribution and the tools used.', False),

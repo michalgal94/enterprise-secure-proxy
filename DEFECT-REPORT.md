@@ -16,6 +16,13 @@ These are the issues fixed during development, along with the tests or checks th
 | Forwarded was set before the dispatch-intent write could fail | Save the intent first, then mark the attempt just before Send | Dispatch_intent_failure_does_not_claim_forwarding_or_send |
 | A crash or completion-write failure could leave the forwarding result unclear | Keep the durable Dispatching record and document that unfinished attempts need reconciliation | Audit_completion_failure_leaves_durable_dispatch_intent |
 | The HTTPS test certificate failed with Windows Schannel | Import the generated certificate as PFX so the private key is available | NetworkTests |
+| The shared demo identity couldn't distinguish real callers or restrict their operations | Add JWT validation, enabled caller records and explicit operation grants, with no demo-key fallback in JWT mode | CallerSecurityTests; SQL grant-revocation checks |
+| A SQL identity lookup could accept a case or trailing-space variant of a subject | Use binary collation for caller/grant keys and require an ordinal subject match before authorization | Real_SQL_persists_success_and_rejection_audits |
+| Bounded concurrency alone didn't limit request volume over time | Add a fixed-window quota per authenticated subject while retaining the shared concurrency cap | Rate_limits_are_separate_for_each_authenticated_caller; concurrency saturation test |
+| Repeated destination failures continued to use network resources | Add a separate circuit per destination around send and bounded body reads, without retries | ResilienceAndCacheTests; Open_circuit_is_audited_without_claiming_or_attempting_dispatch; standalone SQL smoke |
+| Errors from management and unknown routes didn't all use the same public contract | Use the same safe code/correlationId shape at each HTTP boundary | Public_errors_have_the_same_safe_contract |
+| Optional caching needed defined invalidation and a stale-load safeguard | Add bounded absolute expiry, post-commit invalidation and a generation check; keep grants uncached | ResilienceAndCacheTests; Grant_revocation_applies_even_when_operation_configuration_is_cached |
+| Execution telemetry didn't include metrics, spans or administrator identity | Add bounded metric tags, activity spans, JSON console output and actor-aware configuration history | Execution_emits_metrics_and_links_its_trace_to_the_audit; Admin_update_invalidates_local_cache_and_records_the_actor |
 
 ## Security checks
 
@@ -25,9 +32,9 @@ The SQL rowversion tests passed against SQL Server in CI and checked stale updat
 
 ## Verification
 
-All 67 automated tests passed against SQL Server in [GitHub Actions](https://github.com/michalgal94/enterprise-secure-proxy/actions/runs/43347254387). The standalone HTTPS API-to-mock run with SQL also passed.
+The expanded local suite passes 96 tests, with two SQL tests pending the new CI run. The previous 67-test SQL suite and standalone HTTPS check passed. [VERIFICATION](docs/VERIFICATION.md) records the exact revision and results.
 
 ## Future work
 
-- Replace shared API keys with caller identities and operation permissions before production use.
-- Set up egress restrictions, key rotation, monitoring and auditing for configuration changed directly in SQL. More detail is in DESIGN-NOTES.md.
+- Configure the deployed API's real identity provider and export its existing metrics/spans to a monitoring backend.
+- Set up egress restrictions, key rotation, distributed ingress limits where needed, and auditing for configuration changed directly in SQL. More detail is in DESIGN-NOTES.md.

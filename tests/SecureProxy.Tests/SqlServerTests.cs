@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using System.Net;
 using System.Text;
 using SecureProxy;
@@ -31,23 +32,36 @@ public sealed class SqlServerTests
         await using var db = new ProxyDb(options); await db.Database.MigrateAsync();
         var key = "sql-execute-" + Guid.NewGuid().ToString("N");
         var op = new Operation { Key = key, Enabled = true, Path = "echo", Destination = new() { Name = key, Enabled = true, BaseUrl = "https://configured.example/" } };
-        db.Add(op); await db.SaveChangesAsync();
+        var callerId = "sql-caller-" + Guid.NewGuid().ToString("N");
+        db.Callers.Add(new Caller { Id = callerId, Grants = [new() { Operation = op }] }); await db.SaveChangesAsync();
         var recorder = new Recorder();
-        var ids = new[] { Guid.NewGuid().ToString("N"), Guid.NewGuid().ToString("N") };
+        var ids = Enumerable.Range(0, 5).Select(_ => Guid.NewGuid().ToString("N")).ToArray();
         try
         {
-            var executor = new ProxyExecutor(db, new RequestPolicy(new NoKeys()), recorder, NullLogger<ProxyExecutor>.Instance);
+            using var cache = new ConfigurationCache(Options.Create(new ConfigurationCacheOptions()), TimeProvider.System);
+            var circuit = new DestinationCircuitBreaker(Options.Create(new ProxyResilienceOptions()), TimeProvider.System, NullLogger<DestinationCircuitBreaker>.Instance);
+            var executor = new ProxyExecutor(db, new RequestPolicy(new NoKeys()), recorder, NullLogger<ProxyExecutor>.Instance, new OperationCatalog(db, cache), circuit);
             var valid = System.Text.Json.JsonSerializer.Serialize(new { clientId = key, json = new { urlId = op.DestinationId } });
-            Assert.Equal(200, (await executor.ExecuteAsync(new MemoryStream(Encoding.UTF8.GetBytes(valid)), "application/json", new HeaderDictionary(), ids[0], default)).Status);
+            Assert.Equal(200, (await executor.ExecuteAsync(new MemoryStream(Encoding.UTF8.GetBytes(valid)), "application/json", new HeaderDictionary(), ids[0], default, callerId)).Status);
+            Assert.Equal(1, recorder.Count);
+            Assert.Equal(403, (await executor.ExecuteAsync(new MemoryStream(Encoding.UTF8.GetBytes(valid)), "application/json", new HeaderDictionary(), ids[3], default, callerId.ToUpperInvariant())).Status);
+            Assert.Equal(403, (await executor.ExecuteAsync(new MemoryStream(Encoding.UTF8.GetBytes(valid)), "application/json", new HeaderDictionary(), ids[4], default, callerId + " ")).Status);
             Assert.Equal(1, recorder.Count);
             var invalid = System.Text.Json.JsonSerializer.Serialize(new { clientId = key, json = new { urlId = op.DestinationId, extra = "rejected" } });
-            Assert.Equal(400, (await executor.ExecuteAsync(new MemoryStream(Encoding.UTF8.GetBytes(invalid)), "application/json", new HeaderDictionary(), ids[1], default)).Status);
+            Assert.Equal(400, (await executor.ExecuteAsync(new MemoryStream(Encoding.UTF8.GetBytes(invalid)), "application/json", new HeaderDictionary(), ids[1], default, callerId)).Status);
+            Assert.Equal(1, recorder.Count);
+            db.CallerOperationGrants.Remove(await db.CallerOperationGrants.SingleAsync(x => x.CallerId == callerId));
+            await db.SaveChangesAsync();
+            Assert.Equal(403, (await executor.ExecuteAsync(new MemoryStream(Encoding.UTF8.GetBytes(valid)), "application/json", new HeaderDictionary(), ids[2], default, callerId)).Status);
             Assert.Equal(1, recorder.Count);
             await using var verify = new ProxyDb(options);
             var logs = await verify.ExecutionLogs.Where(x => ids.Contains(x.CorrelationId)).ToListAsync();
-            Assert.Equal(2, logs.Count);
+            Assert.Equal(5, logs.Count);
             Assert.True(logs.Single(x => x.CorrelationId == ids[0]).Forwarded);
             Assert.False(logs.Single(x => x.CorrelationId == ids[1]).Forwarded);
+            Assert.False(logs.Single(x => x.CorrelationId == ids[2]).Forwarded);
+            Assert.Equal("operation_not_permitted", logs.Single(x => x.CorrelationId == ids[2]).Reason);
+            Assert.All(logs.Where(x => x.CorrelationId == ids[3] || x.CorrelationId == ids[4]), x => Assert.False(x.Forwarded));
             Assert.All(logs, x => Assert.NotNull(x.CompletedAt));
         }
         finally
@@ -55,6 +69,7 @@ public sealed class SqlServerTests
             await db.ExecutionLogs.Where(x => ids.Contains(x.CorrelationId)).ExecuteDeleteAsync();
             await db.Operations.Where(x => x.Id == op.Id).ExecuteDeleteAsync();
             await db.Destinations.Where(x => x.Id == op.DestinationId).ExecuteDeleteAsync();
+            await db.Callers.Where(x => x.Id == callerId).ExecuteDeleteAsync();
         }
     }
     [SqlServerFact]
