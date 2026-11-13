@@ -23,6 +23,7 @@ paragraphs = [
     ('Install .NET 8 SDK and SQL Server (or Docker). Restore/build. Configure separate proxy/admin API keys and SQL connection through environment variables. Trust a local HTTPS development certificate. Run the application with --initialize. Start the mock on HTTPS port 7443 and proxy on HTTPS port 7444. Use the README commands for the exact sequence.', False),
     ('Security decisions', True),
     ('Only trusted configuration determines URL, HTTP method and path. json.urlId must match the configured destination ID. All validation and AES-GCM authentication precede forwarding. Redirects, cookie forwarding, automatic retries and unrestricted header propagation are disabled.', False),
+    ('JWT mode validates external access tokens and SQL grants restrict each caller to permitted operations. Separate demo keys keep local setup simple. Per-caller quotas, bounded concurrency and per-destination circuits protect resources without retrying. Optional configuration caching is bounded and disabled by default; caller grants always read SQL.', False),
     ('Audit intent is mandatory before dispatch. Post-dispatch audit failure cannot undo an upstream side effect. Rowversion protects the enabled-state management endpoint. In-flight requests may complete after configuration is disabled.', False),
     ('Verification and handoff', True),
     ('docs/VERIFICATION.md records the exact tested revision, automated test counts and SQL-backed standalone HTTPS results. The GitHub workflow runs the complete suite with SQL Server 2022.', False),

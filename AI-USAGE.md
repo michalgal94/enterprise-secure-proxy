@@ -6,7 +6,7 @@ OpenAI Codex also generated and revised substantial parts of the C# implementati
 
 ## Changes I requested
 
-1. **Completing SQL verification** The first version left the SQL integration tests skipped locally and the full SQL-backed run unfinished. I asked for those checks to be completed before submission rather than left as follow-up work. The existing SQL Server CI job was run, and a standalone HTTPS smoke check was added. All 67 tests passed with no skips, and the full SQL-backed run passed too.
+1. **Completing SQL verification** The first version left the SQL integration tests skipped locally and the full SQL-backed run unfinished. I asked for those checks to be completed before submission rather than left as follow-up work. The SQL Server CI job was run, and a standalone HTTPS smoke check was added. These checks are now part of the workflow; the expanded suite passes all 98 tests without skips, and the full SQL-backed run passes too.
 
 2. **Checking optional requirements properly** The earlier version had a concurrency cap, but no per-caller rate limit or circuit breaker, and caching was only explained as a future choice. I checked these points against section 6 and asked for a more complete implementation where it made sense. Rate limits and destination circuits were added without retries. A bounded cache was added with expiry and invalidation, but stays off by default. Caller permissions and observability were also extended, and the documentation was updated to match the code.
 

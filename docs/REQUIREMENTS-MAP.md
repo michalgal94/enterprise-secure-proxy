@@ -1,6 +1,6 @@
 # Assessment requirements and evidence
 
-Reviewed against every section of docs/assignment.md. The expanded local suite passes 96 tests; two SQL tests await the new CI run. The previous 67-test SQL suite and standalone HTTPS check passed in GitHub Actions. See [VERIFICATION.md](VERIFICATION.md) for the recorded revision and evidence.
+Reviewed against every section of docs/assignment.md. All 98 tests passed without failures or skips against SQL Server 2022 in GitHub Actions. The standalone SQL-backed HTTPS check also passed. See [VERIFICATION.md](VERIFICATION.md) for the recorded revision and evidence.
 
 ## Functional, data and reliability requirements
 

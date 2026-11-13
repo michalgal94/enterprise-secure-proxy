@@ -32,7 +32,7 @@ The SQL rowversion tests passed against SQL Server in CI and checked stale updat
 
 ## Verification
 
-The expanded local suite passes 96 tests, with two SQL tests pending the new CI run. The previous 67-test SQL suite and standalone HTTPS check passed. [VERIFICATION](docs/VERIFICATION.md) records the exact revision and results.
+All 98 tests passed with no failures or skips against SQL Server 2022 in [GitHub Actions](https://github.com/michalgal94/enterprise-secure-proxy/actions/runs/43491907864). The standalone SQL-backed HTTPS check passed too. [VERIFICATION](docs/VERIFICATION.md) records the exact revision and results.
 
 ## Future work
 

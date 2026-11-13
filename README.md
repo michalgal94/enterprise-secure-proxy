@@ -308,7 +308,7 @@ Console logs are structured JSON with UTC timestamps. Audit rows also include re
 
 ## Automated verification
 
-The latest local run passed **96 tests**, with the two SQL integration tests explicitly skipped because this Windows environment has no SQL instance. The expanded SQL-backed CI run is pending. The earlier 67-test suite and standalone SQL-backed HTTPS check passed in [GitHub Actions](https://github.com/michalgal94/enterprise-secure-proxy/actions/runs/43347254387). See [VERIFICATION](docs/VERIFICATION.md) for the recorded revision and results.
+All **98 tests passed with no failures or skips** against SQL Server 2022 in [GitHub Actions](https://github.com/michalgal94/enterprise-secure-proxy/actions/runs/43491907864). The standalone SQL-backed HTTPS check passed too. The local run passes 96 tests and explicitly skips the two SQL tests when `PROXY_TEST_SQL` isn't set. See [VERIFICATION](docs/VERIFICATION.md) for the recorded revision and results.
 
 ```powershell
 dotnet test --configuration Release --logger trx
