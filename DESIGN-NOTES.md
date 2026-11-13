@@ -99,18 +99,65 @@ Console logs use JSON with UTC timestamps and structured fields. Every request r
 
 ## Security and reliability trade-offs
 
-| # | Decision | Benefit | Cost or limitation |
-| ---: | --- | --- | --- |
-| 1 | Mandatory SQL audit before dispatch | Every admitted outbound attempt has durable intent | A SQL outage stops forwarding. Cached config doesn't make SQL optional |
-| 2 | Persist completion after the upstream call | Records actual result separately from intent | No transaction spans SQL and HTTP; a completion failure can leave an ambiguous side effect |
-| 3 | Cache off by default; bounded opt-in TTL | Simple freshness by default, lower configuration read load when enabled | Cached policy can remain stale until invalidation/expiry; in-flight work may finish |
-| 4 | Fresh caller/grant checks | Revocation isn't delayed by the configuration cache | Extra SQL reads; revocation after authorization can't undo in-flight work |
-| 5 | JWT identity plus explicit grants | Caller identity and operation permission are separate checks | Provider availability/signing-key rotation and token policies require operational ownership |
-| 6 | Bounded response buffering | Reliable size enforcement and consistent safe errors before headers | More peak memory than direct streaming; capped concurrency limits the exposure |
-| 7 | No automatic retries | Avoids accidental duplicate POST effects | Callers must decide on recovery using upstream idempotency support |
-| 8 | Per-destination circuit and local admission limits | Fails fast during outages and bounds resource use | Thresholds can reject a recovering destination; per-process limits don't form a cluster quota |
-| 9 | Restricted path alphabet and header allowlists | Smaller injection/forwarding surface | Some valid upstream contracts need an explicit policy extension |
-| 10 | Internal destinations allowed from trusted config | Supports the required internal API use case | DNS and egress controls remain part of deployment security |
+- **Mandatory SQL audit before dispatch**
+
+  **Benefit:** Every admitted outbound attempt has durable intent
+
+  **Cost or limitation:** A SQL outage stops forwarding. Cached config doesn't make SQL optional
+
+- **Persist completion after the upstream call**
+
+  **Benefit:** Records actual result separately from intent
+
+  **Cost or limitation:** No transaction spans SQL and HTTP; a completion failure can leave an ambiguous side effect
+
+- **Cache off by default; bounded opt-in TTL**
+
+  **Benefit:** Simple freshness by default, lower configuration read load when enabled
+
+  **Cost or limitation:** Cached policy can remain stale until invalidation/expiry; in-flight work may finish
+
+- **Fresh caller/grant checks**
+
+  **Benefit:** Revocation isn't delayed by the configuration cache
+
+  **Cost or limitation:** Extra SQL reads; revocation after authorization can't undo in-flight work
+
+- **JWT identity plus explicit grants**
+
+  **Benefit:** Caller identity and operation permission are separate checks
+
+  **Cost or limitation:** Provider availability/signing-key rotation and token policies require operational ownership
+
+- **Bounded response buffering**
+
+  **Benefit:** Reliable size enforcement and consistent safe errors before headers
+
+  **Cost or limitation:** More peak memory than direct streaming; capped concurrency limits the exposure
+
+- **No automatic retries**
+
+  **Benefit:** Avoids accidental duplicate POST effects
+
+  **Cost or limitation:** Callers must decide on recovery using upstream idempotency support
+
+- **Per-destination circuit and local admission limits**
+
+  **Benefit:** Fails fast during outages and bounds resource use
+
+  **Cost or limitation:** Thresholds can reject a recovering destination; per-process limits don't form a cluster quota
+
+- **Restricted path alphabet and header allowlists**
+
+  **Benefit:** Smaller injection/forwarding surface
+
+  **Cost or limitation:** Some valid upstream contracts need an explicit policy extension
+
+- **Internal destinations allowed from trusted config**
+
+  **Benefit:** Supports the required internal API use case
+
+  **Cost or limitation:** DNS and egress controls remain part of deployment security
 
 ## Verification boundaries
 

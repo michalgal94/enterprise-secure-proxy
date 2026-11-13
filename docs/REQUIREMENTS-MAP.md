@@ -1,6 +1,6 @@
 # Assessment requirements and evidence
 
-Reviewed against every section of docs/assignment.md. All 98 tests passed without failures or skips against SQL Server 2022 in GitHub Actions. The standalone SQL-backed HTTPS check also passed. See [VERIFICATION.md](VERIFICATION.md) for the recorded revision and evidence.
+ All 98 tests passed without failures or skips against SQL Server 2022 in GitHub Actions. The standalone SQL-backed HTTPS check also passed. See [VERIFICATION.md](VERIFICATION.md) for the recorded revision and evidence.
 
 ## Functional, data and reliability requirements
 
@@ -28,7 +28,7 @@ Reviewed against every section of docs/assignment.md. All 98 tests passed withou
 | 8: Structured logging and audit policy | JSON console metadata, correlation/trace IDs, metrics, execution spans, mandatory admission, dispatch intent and independent completion | HTTP metric/trace test; success/rejection/failure/outage tests; ingress and execution audit boundaries documented |
 | 8: SQL unavailable during audit | Admission failure prevents dispatch; post-dispatch failure returns 503 and leaves intent; reconciliation documented | Failure injection verified; mandatory-audit outage policy documented |
 | 14: AI usage | AI-USAGE describes tools and their contributions | Documented |
-| 14: Security/reliability trade-offs | Explicit benefit/cost table in DESIGN-NOTES; SQL availability, cache freshness, memory, retries, JWT and in-flight revocation | Documented against implemented behavior |
+| 14: Security/reliability trade-offs | Explicit benefit/cost section in DESIGN-NOTES; SQL availability, cache freshness, memory, retries, JWT and in-flight revocation | Documented against implemented behavior |
 
 SQL Server is the configured persistence provider. Operational settings are represented by destination timeout/port and operation size/policy fields; there is no separate arbitrary settings table or general configuration editor.
 
@@ -44,8 +44,6 @@ SQL Server is the configured persistence provider. Operational settings are repr
 | Resilience discussion or implementation | All three mechanisms are implemented: quotas, concurrency and destination circuits. No automatic retries. |
 | Caller identities and permissions | JWT support and explicit SQL operation grants are implemented beyond the core assessment; a live provider requires deployment configuration. |
 | Additional observability | Metrics, execution spans and protected SQL readiness are implemented. A collector and alerting service are deployment tasks. |
-
-The assignment doesn't name a separate bonus section. Its optional choices are covered above; a full admin editor, hosted identity service and monitoring stack would add services beyond this backend assessment.
 
 ## All 17 required automated tests
 

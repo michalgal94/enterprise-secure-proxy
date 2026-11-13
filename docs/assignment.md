@@ -184,8 +184,8 @@ Address the following:
 
 -   You may cache operation and destination configuration.
 -   Explain cache expiration and invalidation.
--   Configuration changes must become effective according to a clearly
-    documented consistency model.
+-   Configuration changes must become effective according to
+    a clearly documented consistency model.
 
 ### Concurrency
 

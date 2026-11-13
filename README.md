@@ -169,16 +169,16 @@ Try adding `destinationUrl` to the envelope, removing `id`, or changing `urlId`:
 ```
 
 - Names are case-sensitive. Unknown envelope fields and duplicate properties are rejected.
-- `urlId` is a required integer matching the configured destination; it is stripped before forwarding.
+- `urlId` is a required integer matching the configured destination. it's stripped before forwarding.
 - Supported rule types: `string`, `integer`, `number`, `boolean`. Numeric strings are not converted.
 - Path values permit ASCII letters, digits, `_` and `-`. A path parameter is always needed to complete its template.
 - Query names/values are escaped. Body parameters form a new JSON object.
 - Unknown parameters are rejected by default. When explicitly allowed, they go only into the body and cannot affect routing. GET/HEAD have no body.
-- The encrypted variant has `encrypted` instead of `json`; even `json:null` is rejected. Authenticated plaintext includes `urlId` and operation parameters.
+- The encrypted variant has `encrypted` instead of `json`. even `json:null` is rejected. Authenticated plaintext includes `urlId` and operation parameters.
 
 ## 6. Update configuration and handle concurrency
 
-In the local demo, management uses a separate key. In JWT mode it requires the signed `proxy.admin` role. Endpoints read operation state and change `Enabled`; they don't expose destination creation or URL overrides.
+In the local demo, management uses a separate key. In JWT mode it requires the signed `proxy.admin` role. Endpoints read operation state and change `Enabled`, they don't expose destination creation or URL overrides.
 
 ```powershell
 $adminHeaders = @{ 'X-Api-Key' = $env:AdminApiKey }
@@ -228,14 +228,14 @@ $env:Security__Audience = 'your-proxy-api-audience'
 
 Use the actual issuer and audience registered for this API. The provider must issue signed access tokens with a stable, non-empty `sub` of at most 128 characters. Signature, issuer, audience and expiry are validated using the provider's HTTPS discovery and signing keys. Admin tokens need a `roles` claim containing `proxy.admin`. JWT mode doesn't accept the demo API keys as a fallback.
 
-Use [docs/grant-caller.sql](docs/grant-caller.sql) to create an enabled caller and grant one configured operation. Set its subject to the token's exact `sub` and its operation key to the intended operation. A valid token alone doesn't grant execution access. To revoke access, delete that grant or set the caller's `Enabled` to 0; these checks read SQL on every execution, even when configuration caching is enabled. An already authorized, in-flight request may still finish.
+Use [docs/grant-caller.sql](docs/grant-caller.sql) to create an enabled caller and grant one configured operation. Set its subject to the token's exact `sub` and its operation key to the intended operation. A valid token alone doesn't grant execution access. To revoke access, delete that grant or set the caller's `Enabled` to 0. these checks read SQL on every execution, even when configuration caching is enabled. An already authorized, in-flight request may still finish.
 
 ```powershell
 $headers = @{ Authorization = "Bearer $env:PROXY_ACCESS_TOKEN" }
 Invoke-RestMethod -Method Post -Uri https://localhost:7444/api/proxy/execute -Headers $headers -ContentType application/json -Body $body
 ```
 
-Obtain the token using your provider's supported flow. The repository doesn't create an identity-provider tenant or store access tokens. Signed-token tests cover accepted and rejected tokens, roles, separate caller quotas and grant revocation; a live provider still needs deployment configuration.
+Obtain the token using your provider's supported flow. The repository doesn't create an identity-provider tenant or store access tokens. Signed-token tests cover accepted and rejected tokens, roles, separate caller quotas and grant revocation. a live provider still needs deployment configuration.
 
 ## Cache and resilience settings
 
@@ -333,7 +333,7 @@ See [VERIFICATION](docs/VERIFICATION.md) for test results and remaining checks, 
 - **Cache only when useful** Caching is implemented but off by default. It has a size cap, short TTL and explicit invalidation. Caller permissions remain uncached.
 - **SQL handles concurrent updates** Rowversion prevents one administrator from silently overwriting another's changes.
 
-The [security and reliability trade-offs](DESIGN-NOTES.md#security-and-reliability-trade-offs) table explains the costs too, including SQL availability, memory use, stale configuration and ambiguous outcomes after dispatch.
+The [security and reliability trade-offs](DESIGN-NOTES.md#security-and-reliability-trade-offs) section explains the costs too, including SQL availability, memory use, stale configuration and ambiguous outcomes after dispatch.
 
 ## Current improvements
 
