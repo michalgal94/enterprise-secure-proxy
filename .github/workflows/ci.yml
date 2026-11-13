@@ -1,0 +1,43 @@
+name: build-and-test
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      sql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: CI_Only_Disposable_873!pass
+        ports: ["1433:1433"]
+    env:
+      PROXY_TEST_SQL: Server=localhost,1433;Database=ProxyTests;User Id=sa;Password=CI_Only_Disposable_873!pass;Encrypt=True;TrustServerCertificate=True
+      PROXY_SMOKE_SQL: Server=localhost,1433;Database=ProxySmoke;User Id=sa;Password=CI_Only_Disposable_873!pass;Encrypt=True;TrustServerCertificate=True
+      MSSQL_SA_PASSWORD: CI_Only_Disposable_873!pass
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore
+      - run: dotnet build --no-restore --configuration Release
+      - name: Wait for SQL to accept connections
+        shell: bash
+        run: |
+          container=$(docker ps --filter ancestor=mcr.microsoft.com/mssql/server:2022-latest --format '{{.ID}}')
+          for attempt in {1..30}; do
+            if docker exec "$container" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'CI_Only_Disposable_873!pass' -C -Q 'SELECT 1'; then exit 0; fi
+            sleep 2
+          done
+          exit 1
+      - run: dotnet test --no-build --configuration Release --logger trx
+      - name: Run the API and mock against SQL Server
+        run: bash .github/scripts/smoke.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: '**/TestResults/*.trx'
