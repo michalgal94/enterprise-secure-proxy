@@ -1,4 +1,4 @@
-# Design notes
+# Design notes - Architecture and technical decisions
 
 ## Scope and trust model
 
@@ -85,7 +85,7 @@ Audit stores correlation, known operation key, destination ID, timestamps, durat
 
 ## Verification boundaries
 
-Tests with EF InMemory exercise behavior without pretending to validate SQL transactions or generated rowversion. Optional SQL integration tests perform migrations, exercise a genuine stale-writer race, and verify successful/rejected audit persistence with a fresh context. HTTP tests exercise middleware, endpoint binding, successful forwarding and the 32-request concurrency gate with TestServer.
+EF InMemory tests cover application behavior. SQL-specific checks use a real SQL Server database. SQL integration tests perform migrations, exercise a stale-writer race, and verify successful/rejected audit persistence with a fresh context. They passed in CI; local runs require PROXY_TEST_SQL. HTTP tests exercise middleware, endpoint binding, successful forwarding and the 32-request concurrency gate with TestServer.
 
 NetworkTests starts a real local Kestrel HTTPS destination and keeps the application's production named HTTP client settings. Only the test client's trust roots are replaced with a freshly generated certificate; no global trust store is changed and no accept-all certificate callback is used. The test records received requests and checks real dispatch, traversal rejection and non-following of redirects. On Windows the generated certificate is exported/imported as PFX so Schannel can access its private key.
 

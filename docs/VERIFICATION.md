@@ -1,6 +1,6 @@
-﻿# Verification record - 2026-11-13
+# Verification record - 2026-11-13
 
-Verified in [GitHub Actions](https://github.com/michalgal94/enterprise-secure-proxy/actions/runs/43346740080) against SQL Server 2022. The run completed successfully.
+Verified in [GitHub Actions](https://github.com/michalgal94/enterprise-secure-proxy/actions/runs/43347254387) against SQL Server 2022. The run completed successfully.
 
 ## Results
 
@@ -20,7 +20,7 @@ Verified in [GitHub Actions](https://github.com/michalgal94/enterprise-secure-pr
 
 Repository: [michalgal94/enterprise-secure-proxy](https://github.com/michalgal94/enterprise-secure-proxy).
 
-The verified CI run used commit `f77bded378d8d34773356146d5d3dc76a1b348ab`. Its test artifact records 67 executed tests and no failures, timeouts or skipped tests. The workflow reruns on subsequent pushes.
+The verified CI run used commit `d425041a8dad4843f0321fc377351ae955ec32e8`. Its test artifact records 67 executed tests and no failures, timeouts or skipped tests. The workflow reruns on subsequent pushes.
 
 ## Full SQL-backed run
 

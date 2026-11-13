@@ -83,7 +83,17 @@ Alternatively, use an existing SQL Server instance or the Windows LocalDB option
 
 ### Windows option: install LocalDB
 
-Install **SQL Server 2022 Express LocalDB** using the [Microsoft instructions](https://learn.microsoft.com/en-us/sql/database-engine/configure-windows/sql-server-express-localdb?view=sql-server-ver16). Select LocalDB when downloading SQL Server Express media, then run `SqlLocalDB.msi` as administrator. Installing the engine needs administrator rights; using your own LocalDB instance afterwards does not.
+LocalDB is optional. The project needs a SQL Server database, but it can use LocalDB, a regular SQL Server instance or the Docker setup above. The full SQL-backed run has already passed in GitHub Actions.
+
+Install **SQL Server 2022 Express LocalDB** using the [Microsoft instructions](https://learn.microsoft.com/en-us/sql/database-engine/configure-windows/sql-server-express-localdb?view=sql-server-ver16). Select LocalDB when downloading SQL Server Express media.
+
+For installation, open PowerShell from the Start menu using **Run as administrator**, approve the Windows prompt with an existing administrator account, and run:
+
+```powershell
+msiexec /i "C:\path\to\SqlLocalDB.msi"
+```
+
+Replace the path with the downloaded installer. If you don't have administrator credentials, the computer's administrator or IT team needs to approve the installation. You don't need to permanently change your account type. After installation, close the elevated terminal and use your normal account for the following steps.
 
 After installation, start an instance and set the connections in PowerShell:
 
@@ -98,8 +108,6 @@ $env:PROXY_TEST_SQL = 'Server=(localdb)\MSSQLLocalDB;Database=SecureProxyTests;I
 ```
 
 Keep the proxy/admin keys from the setup above. Continue with initialization below, then run `dotnet test --configuration Release` to include the SQL tests. LocalDB replaces the Docker database; it does not need an `sa` login or a SQL password.
-
-LocalDB could not be installed on the verification machine because it has no administrator rights. GitHub Actions runs the SQL tests and the full HTTPS smoke check against SQL Server 2022 in a container, so that verification does not depend on a local installation.
 
 Use different proxy/admin keys of at least 32 characters. `sa` and `TrustServerCertificate=True` are local demo choices. Production requires a validated SQL certificate, a restricted application account and a separate migration identity.
 
@@ -238,7 +246,7 @@ No automatic retries are configured. A timeout or post-dispatch 503 is not proof
 
 ## Automated verification
 
-All **67 tests passed with no skips** against SQL Server 2022 in [GitHub Actions](https://github.com/michalgal94/enterprise-secure-proxy/actions/runs/43346740080). The standalone SQL-backed HTTPS check passed too. Local runs include the SQL tests when `PROXY_TEST_SQL` is set.
+All **67 tests passed with no skips** against SQL Server 2022 in [GitHub Actions](https://github.com/michalgal94/enterprise-secure-proxy/actions/runs/43347254387). The standalone SQL-backed HTTPS check passed too. Local runs include the SQL tests when `PROXY_TEST_SQL` is set.
 
 ```powershell
 dotnet test --configuration Release --logger trx

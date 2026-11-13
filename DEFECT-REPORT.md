@@ -1,4 +1,4 @@
-# Defect report
+# Defect report - Bugs along with their fixes
 
 These are the issues fixed during development, along with the tests or checks that cover them.
 
@@ -21,12 +21,13 @@ These are the issues fixed during development, along with the tests or checks th
 
 The tests also cover destination overrides, disabled operations and destinations, invalid methods, missing and unknown parameters, traversal encodings, header filtering, AES-GCM authentication, request and response limits, timeouts and cancellation. Rejected requests must leave the mock destination's request count unchanged.
 
-The SQL rowversion tests check stale updates and transactional history when a SQL test connection is available. InMemory tests alone cannot verify those behaviors.
+The SQL rowversion tests passed against SQL Server in CI and checked stale updates and transactional history. Locally, they run when PROXY_TEST_SQL is set. InMemory tests alone cannot verify those behaviors.
 
 ## Verification
 
-All 67 automated tests passed against SQL Server in [GitHub Actions](https://github.com/michalgal94/enterprise-secure-proxy/actions/runs/43346740080). The standalone HTTPS API-to-mock run with SQL also passed. LocalDB is optional and still needs administrator rights to install on Windows.
+All 67 automated tests passed against SQL Server in [GitHub Actions](https://github.com/michalgal94/enterprise-secure-proxy/actions/runs/43347254387). The standalone HTTPS API-to-mock run with SQL also passed.
 
 ## Future work
+
 - Replace shared API keys with caller identities and operation permissions before production use.
 - Set up egress restrictions, key rotation, monitoring and auditing for configuration changed directly in SQL. More detail is in DESIGN-NOTES.md.
