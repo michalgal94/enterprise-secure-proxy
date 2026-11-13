@@ -99,23 +99,23 @@ Console logs use JSON with UTC timestamps and structured fields. Every request r
 
 ## Security and reliability trade-offs
 
-| Decision | Benefit | Cost or limitation |
-|---|---|---|
-| Mandatory SQL audit before dispatch | Every admitted outbound attempt has durable intent | A SQL outage stops forwarding; cached config doesn't make SQL optional |
-| Persist completion after the upstream call | Records actual result separately from intent | No transaction spans SQL and HTTP; a completion failure can leave an ambiguous side effect |
-| Cache off by default; bounded opt-in TTL | Simple freshness by default, lower configuration read load when enabled | Cached policy can remain stale until invalidation/expiry; in-flight work may finish |
-| Fresh caller/grant checks | Revocation isn't delayed by the configuration cache | Extra SQL reads; revocation after authorization can't undo in-flight work |
-| JWT identity plus explicit grants | Caller identity and operation permission are separate checks | Provider availability/signing-key rotation and token policies require operational ownership |
-| Bounded response buffering | Reliable size enforcement and consistent safe errors before headers | More peak memory than direct streaming; capped concurrency limits the exposure |
-| No automatic retries | Avoids accidental duplicate POST effects | Callers must decide on recovery using upstream idempotency support |
-| Per-destination circuit and local admission limits | Fails fast during outages and bounds resource use | Thresholds can reject a recovering destination; per-process limits don't form a cluster quota |
-| Restricted path alphabet and header allowlists | Smaller injection/forwarding surface | Some valid upstream contracts need an explicit policy extension |
-| Internal destinations allowed from trusted config | Supports the required internal API use case | DNS and egress controls remain part of deployment security |
+| # | Decision | Benefit | Cost or limitation |
+| ---: | --- | --- | --- |
+| 1 | Mandatory SQL audit before dispatch | Every admitted outbound attempt has durable intent | A SQL outage stops forwarding. Cached config doesn't make SQL optional |
+| 2 | Persist completion after the upstream call | Records actual result separately from intent | No transaction spans SQL and HTTP; a completion failure can leave an ambiguous side effect |
+| 3 | Cache off by default; bounded opt-in TTL | Simple freshness by default, lower configuration read load when enabled | Cached policy can remain stale until invalidation/expiry; in-flight work may finish |
+| 4 | Fresh caller/grant checks | Revocation isn't delayed by the configuration cache | Extra SQL reads; revocation after authorization can't undo in-flight work |
+| 5 | JWT identity plus explicit grants | Caller identity and operation permission are separate checks | Provider availability/signing-key rotation and token policies require operational ownership |
+| 6 | Bounded response buffering | Reliable size enforcement and consistent safe errors before headers | More peak memory than direct streaming; capped concurrency limits the exposure |
+| 7 | No automatic retries | Avoids accidental duplicate POST effects | Callers must decide on recovery using upstream idempotency support |
+| 8 | Per-destination circuit and local admission limits | Fails fast during outages and bounds resource use | Thresholds can reject a recovering destination; per-process limits don't form a cluster quota |
+| 9 | Restricted path alphabet and header allowlists | Smaller injection/forwarding surface | Some valid upstream contracts need an explicit policy extension |
+| 10 | Internal destinations allowed from trusted config | Supports the required internal API use case | DNS and egress controls remain part of deployment security |
 
 ## Verification boundaries
 
-EF InMemory tests cover application behavior. SQL-specific checks use a real SQL Server database. SQL integration tests perform migrations, exercise a stale-writer race, and verify successful/rejected audit persistence with a fresh context. They passed in CI, local runs require PROXY_TEST_SQL. HTTP tests exercise middleware, endpoint binding, successful forwarding and the 32-request concurrency gate with TestServer.
+* EF InMemory tests cover application behavior. SQL-specific checks use a real SQL Server database. SQL integration tests perform migrations, exercise a stale-writer race, and verify successful/rejected audit persistence with a fresh context. They passed in CI, local runs require PROXY_TEST_SQL. HTTP tests exercise middleware, endpoint binding, successful forwarding and the 32-request concurrency gate with TestServer.
 
-NetworkTests starts a real local Kestrel HTTPS destination and keeps the application's production named HTTP client settings. Only the test client's trust roots are replaced with a freshly generated certificate. no global trust store is changed and no accept-all certificate callback is used. The test records received requests and checks real dispatch, traversal rejection and non-following of redirects. On Windows the generated certificate is exported/imported as PFX so Schannel can access its private key.
+* NetworkTests starts a real local Kestrel HTTPS destination and keeps the application's production named HTTP client settings. Only the test client's trust roots are replaced with a freshly generated certificate. no global trust store is changed and no accept-all certificate callback is used. The test records received requests and checks real dispatch, traversal rejection and non-following of redirects. On Windows the generated certificate is exported/imported as PFX so Schannel can access its private key.
 
-The GitHub workflow also starts the standalone API and mock against SQL Server 2022. Its smoke script checks forwarding, grant revocation with caching enabled, cache invalidation, management concurrency, AES-GCM, circuit opening and persisted audit/actor records. JWT tests use real RSA-signed tokens with a test issuer configuration; they don't contact an external identity provider. Cache/breaker timing tests use a fake clock. See docs/VERIFICATION.md for the latest verified run and local setup details.
+* The GitHub workflow also starts the standalone API and mock against SQL Server 2022. Its smoke script checks forwarding, grant revocation with caching enabled, cache invalidation, management concurrency, AES-GCM, circuit opening and persisted audit/actor records. JWT tests use real RSA-signed tokens with a test issuer configuration; they don't contact an external identity provider. Cache/breaker timing tests use a fake clock. See docs/VERIFICATION.md for the latest verified run and local setup details.
