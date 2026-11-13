@@ -1,42 +1,53 @@
-# Verification record - 2026-11-12
+﻿# Verification record - 2026-11-13
 
-Environment: Windows x64, .NET SDK 8.0.428, runtime 8.0.34. EF Core and ASP.NET Core test packages: 8.0.34.
+Verified in [GitHub Actions](https://github.com/michalgal94/enterprise-secure-proxy/actions/runs/43346740080) against SQL Server 2022. The run completed successfully.
 
-## Completed checks
+## Results
 
 | Check | Result |
 |---|---|
-| Restore and build | Succeeded; Release solution build: 0 warnings, 0 errors; application, tests and standalone mock built |
-| Final `dotnet test --configuration Release --logger trx` | **65 passed, 0 failed, 2 skipped; 67 total** |
-| EF migration/model comparison | `dotnet ef migrations has-pending-model-changes --project src/SecureProxy`: no pending model changes |
-| SQL migration artifact | Idempotent docs/schema.sql exists and matches the EF schema version; not executed against a live SQL instance here |
-| Dependency audit | `dotnet list package --vulnerable --include-transitive`: no vulnerable packages reported by the configured NuGet source at check time; not a complete security assessment |
-| Real HTTPS destination | Passed: actual Kestrel HTTPS server and the production named HttpClient; valid dispatch, traversal rejection and redirect not followed |
-| HTTP pipeline | Successful forwarding, unknown operation, authentication/transport gates, malformed admin input, correlation/source headers and concurrency saturation passed |
-| Bounded I/O and cancellation | Request/response caps, absent Content-Length, stalled response body, caller abort, upstream timeout and broken response stream passed |
-| Security/policy | URL/method/path override attempts, duplicate input, disabled operation/destination, path encodings, parameter placement/types/ranges, headers and AES-GCM cases passed |
-| Audit failure injection | Admission and dispatch-intent failures send nothing; completion failure preserves durable Dispatching state; forwarding is not falsely claimed on a failed intent write |
-| Documentation | Setup instructions, design notes, defect report, AI declaration and requirements map are included |
+| Release build | Passed for the API, tests and standalone mock |
+| Automated tests with SQL Server | **67 passed, 0 failed, 0 skipped**; confirmed from the uploaded TRX artifact |
+| SQL migrations | Applied successfully to the integration-test and standalone smoke databases |
+| SQL concurrency | A real stale-writer race returns 409; the failed update does not add a history entry |
+| SQL audit persistence | Success and rejection records are checked using a fresh database context |
+| Standalone SQL-backed HTTPS run | Passed with the separately started API and mock |
+| AES-GCM | Valid encrypted input succeeds; a corrupted tag is rejected without another destination call |
+| Request policy | Override attempts, traversal, disabled operations and invalid parameters are blocked |
+| Failure handling | Timeouts, caller cancellation, broken body reads, audit-write failures and connection failure are covered |
+| Resource limits | Request/response caps and the 32-request concurrency limit are covered |
+| Public delivery | Repository is public and the Word document contains its actual URL |
 
-## What the real HTTPS test proves
+Repository: [michalgal94/enterprise-secure-proxy](https://github.com/michalgal94/enterprise-secure-proxy).
 
-NetworkTests uses an actual local TCP/TLS Kestrel destination that records incoming requests. The proxy's inbound side runs through TestServer and its database uses EF InMemory. The test keeps the application's actual named SocketsHttpHandler and changes only its test trust roots to a generated certificate. No global certificate store is changed and no accept-all validation callback is used. It verifies that the destination receives a valid request, receives no traversal request, and receives no additional redirected request.
+The verified CI run used commit `f77bded378d8d34773356146d5d3dc76a1b348ab`. Its test artifact records 67 executed tests and no failures, timeouts or skipped tests. The workflow reruns on subsequent pushes.
 
-The database in this test is InMemory. The standalone mock-to-proxy run with SQL Server still needs to be checked.
+## Full SQL-backed run
 
-## SQL verification remains pending
+`.github/scripts/smoke.sh` starts the built API and mock as separate processes. Both use HTTPS, and the API uses a dedicated SQL Server database. Normal certificate validation remains enabled; the Linux processes trust the temporary test certificate through SSL_CERT_FILE.
 
-These two tests are explicitly skipped because PROXY_TEST_SQL is not configured:
+The script checks:
 
-- Real_SQL_rowversion_rejects_stale_writer_and_records_history_atomically
-- Real_SQL_persists_success_and_rejection_audits
+- A configured request reaches the mock and returns the expected customer.
+- URL/method override attempts and a wrong destination ID return 400 without increasing the mock's count.
+- A disabled operation returns 403 without forwarding.
+- An old rowversion returns 409; re-enabling uses the current version.
+- Valid AES-GCM input reaches the mock; plaintext and corrupted encrypted input are rejected when encryption is required.
+- Stopping the mock produces a 502.
+- SQL contains completed success, rejection and failure audits, plus exactly the two successful configuration changes.
 
-SQL Server was unavailable locally. LocalDB installation failed because the account lacks administrator rights (MSI exit 1603). These tests still need a real SQL connection.
+The recorded CI output ends with: `SQL-backed HTTPS smoke passed: forwarding, blocked requests, rowversion, AES-GCM, connection failure and persisted audit.`
 
-InMemory tests do not prove SQL transactions, rowversion generation or migration execution. Set PROXY_TEST_SQL to a dedicated SQL database or run the supplied GitHub workflow to complete this verification. Run the documented standalone HTTPS mock and proxy against that database as well.
+## Local environment
 
-## Submission remains pending
+The local Windows Release build passed with 0 warnings and 0 errors using SDK 8.0.428 and runtime 8.0.34. The local test run passed 65 tests and skipped the two SQL tests because no local SQL instance was available. Both skipped tests then passed in GitHub Actions.
 
-The repository still needs to be published and CI needs to pass. The workflow includes a disposable SQL Server service. Add the published URL to the Word document before submitting.
+LocalDB is not installed on this Windows account. Its installer needs administrator rights; the earlier attempt returned MSI 1603. This does not block submission or CI verification. The README explains how to install LocalDB on a Windows machine with administrator access, or use Docker instead.
 
-REQUIREMENTS-MAP.md maps all 17 required test scenarios to the code. The remaining submission steps are live SQL verification, the standalone SQL-backed run, and GitHub/Word delivery.
+Additional local checks passed: no pending EF model changes, no vulnerable dependencies reported by the configured NuGet source, valid Word ZIP/XML, working document links, and no local installers/build output/credentials tracked in Git. The dependency check is not a complete security assessment.
+
+## Submission
+
+The public repository contains the solution, migration and SQL script, automated tests, README, design notes, defect report, AI usage declaration and Word summary. REQUIREMENTS-MAP.md maps every assessment section and all 17 required test scenarios to the implementation.
+
+Production follow-up items, such as per-caller permissions and managed key rotation, remain documented as design limitations and future improvements.

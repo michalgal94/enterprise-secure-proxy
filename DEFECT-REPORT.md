@@ -1,4 +1,4 @@
-﻿# Defect report
+# Defect report
 
 These are the issues fixed during development, along with the tests or checks that cover them.
 
@@ -23,9 +23,10 @@ The tests also cover destination overrides, disabled operations and destinations
 
 The SQL rowversion tests check stale updates and transactional history when a SQL test connection is available. InMemory tests alone cannot verify those behaviors.
 
-## Remaining work
+## Verification
 
-- Run the SQL integration tests and the full SQL-backed setup. SQL Server was unavailable locally, and LocalDB installation needs administrator rights.
+All 67 automated tests passed against SQL Server in [GitHub Actions](https://github.com/michalgal94/enterprise-secure-proxy/actions/runs/43346740080). The standalone HTTPS API-to-mock run with SQL also passed. LocalDB is optional and still needs administrator rights to install on Windows.
+
+## Future work
 - Replace shared API keys with caller identities and operation permissions before production use.
 - Set up egress restrictions, key rotation, monitoring and auditing for configuration changed directly in SQL. More detail is in DESIGN-NOTES.md.
-- Publish the repository, run CI and add the real URL to the Word submission document.

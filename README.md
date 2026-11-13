@@ -3,7 +3,7 @@
 [Repository](https://github.com/michalgal94/enterprise-secure-proxy) ? [Build and tests](https://github.com/michalgal94/enterprise-secure-proxy/actions/workflows/ci.yml)
 
 A backend-only Web API using ASP.NET Core, EF Core and SQL Server. Callers select an explicitly configured operation,
-while trusted database configuration determines the destination, HTTP method and path. 
+while trusted database configuration determines the destination, HTTP method and path.
 
 ## How it works
 
@@ -115,7 +115,7 @@ This applies migrations, seeds the demo only when no destinations exist, then ex
 
 The destination ID is normally 1 in a fresh database. Otherwise query `SELECT Id, Name FROM Destinations` and use the actual ID in `json.urlId`.
 
-Schema-only alternatives: `dotnet ef database update --project src/SecureProxy` or execute [docs/schema.sql](docs/schema.sql) using a SQL tool. Don't run all alternatives. schema-only deployment doesn't seed demo configuration.
+Schema-only alternatives: `dotnet ef database update --project src/SecureProxy` or execute [docs/schema.sql](docs/schema.sql) using a SQL tool. Don't run all alternatives. Schema-only deployment doesn't seed demo configuration.
 
 ## 4. Start mock and proxy
 
@@ -131,7 +131,7 @@ In the terminal holding the original connection string and keys:
 dotnet run --project src/SecureProxy -- --urls https://localhost:7444
 ```
 
-Use a third terminal for client calls, setting `ProxyApiKey` to the same original value used by the proxy. For admin calls, use the original `AdminApiKey` too. Environment variables are local to a shell and its child processes.Generating replacement keys in a new client shell will not authenticate.
+Use a third terminal for client calls, setting `ProxyApiKey` to the same original value used by the proxy. For admin calls, use the original `AdminApiKey` too. Environment variables are local to a shell and its child processes. Generating replacement keys in a new client shell will not authenticate.
 
 `AllowedHosts` is `localhost`. Set approved deployment hostnames explicitly. HTTPS is required. TLS termination behind a reverse proxy needs an explicitly trusted forwarded-header configuration, which is not enabled here.
 
@@ -176,7 +176,7 @@ Invoke-RestMethod -Method Put -Uri https://localhost:7444/api/admin/operations/c
 
 Reusing the old version returns 409. To re-enable, read the current version and send `enabled=true`. SQL generates rowversion and EF includes the expected version in the UPDATE predicate, covering races after the initial check. The state change and history commit atomically.
 
-Other configuration is managed through controlled SQL/migrations by an authorized operator. Direct SQL changes need DBA/deployment auditing. application history covers the exposed state-update endpoint. Update related configuration within a transaction.
+Other configuration is managed through controlled SQL/migrations by an authorized operator. Direct SQL changes need DBA/deployment auditing. Application history covers the exposed state-update endpoint. Update related configuration within a transaction.
 
 ## 7. Demonstrate encryption
 
@@ -223,13 +223,13 @@ Errors use non-sensitive codes and correlation IDs. `X-Proxy-Source=upstream` id
 
 Upstream error/redirect bodies and headers are discarded to prevent disclosure. No Location or Set-Cookie is copied. Successful content passes through as JSON for application/json, otherwise as application/octet-stream. Authorized destination owners remain responsible for the business data in successful responses.
 
-The envelope hard cap is 1 MiB, with per-operation caps. Authenticated plaintext must also fit. base64 overhead reduces usable encrypted size. Responses are capped per operation up to 8 MiB. Chunked reads are bounded even without Content-Length. A response is buffered within the cap before emitting headers, allowing consistent 502 errors. temporary copies increase peak memory. At most 32 proxy requests per instance execute, with no waiting queue.
+The envelope hard cap is 1 MiB, with per-operation caps. Authenticated plaintext must also fit. Base64 overhead reduces usable encrypted size. Responses are capped per operation up to 8 MiB. Chunked reads are bounded even without Content-Length. A response is buffered within the cap before emitting headers, allowing consistent 502 errors. Temporary copies increase peak memory. At most 32 proxy requests per instance execute, with no waiting queue.
 
 No automatic retries are configured. A timeout or post-dispatch 503 is not proof a POST did not execute. When the upstream supports idempotency, explicitly allow Idempotency-Key and reuse it on retries. Forwarding that header alone doesn't implement deduplication.
 
 ## Audit and consistency
 
-- Every attempt admitted into the executor requires durable SQL intent before forwarding. successes, rejections and failures get completion metadata.
+- Every attempt admitted into the executor requires durable SQL intent before forwarding. Successes, rejections and failures get completion metadata.
 - Transport/authentication/host/concurrency rejections are outside ExecutionLog and should be monitored at ingress using metadata only. Body logging is not enabled.
 - Dispatching is persisted before Send, with Forwarded=false. Completed rows mark Forwarded=true only for a dispatch attempt. An unfinished Dispatching row is ambiguous even when Forwarded=false: the process may have sent the request before saving completion. No flag proves upstream receipt.
 - Admission failure blocks dispatch. Completion-write failure emits Critical metadata-only telemetry and returns 503, retaining the prior intent for reconciliation. There is no distributed exactly-once guarantee.
@@ -237,6 +237,8 @@ No automatic retries are configured. A timeout or post-dispatch 503 is not proof
 - Logs omit bodies, credentials, cookies, key bytes and exception messages. Operation keys are recorded only after recognition. Configure retention, access control and alerts for unfinished audits in deployment.
 
 ## Automated verification
+
+All **67 tests passed with no skips** against SQL Server 2022 in [GitHub Actions](https://github.com/michalgal94/enterprise-secure-proxy/actions/runs/43346740080). The standalone SQL-backed HTTPS check passed too. Local runs include the SQL tests when `PROXY_TEST_SQL` is set.
 
 ```powershell
 dotnet test --configuration Release --logger trx
@@ -250,7 +252,7 @@ The GitHub workflow also starts the standalone proxy and mock with SQL Server, t
 
 The recording handler captures every outgoing method, URI, header and body. Pre-forward rejection tests assert no received calls. TestServer checks middleware/endpoints, SQL tests check provider-specific concurrency/history. EF InMemory doesn't prove SQL semantics or migration compatibility.
 
-See [VERIFICATION](docs/VERIFICATION.md) for test results and remaining checks, and [REQUIREMENTS-MAP](docs/REQUIREMENTS-MAP.md) for coverage. 
+See [VERIFICATION](docs/VERIFICATION.md) for test results and remaining checks, and [REQUIREMENTS-MAP](docs/REQUIREMENTS-MAP.md) for coverage.
 
 ## Key decisions
 
@@ -258,7 +260,7 @@ See [VERIFICATION](docs/VERIFICATION.md) for test results and remaining checks, 
 - **Requests are checked before sending.** Tests also check that rejected requests never reach the destination.
 - **Bodies have size limits.** Input is validated in full, and responses are buffered up to a fixed limit. This makes error handling predictable, but uses more memory than full streaming.
 - **No automatic retries.** A timeout doesn't mean a POST wasn't processed. Retrying safely needs support from the destination, such as an idempotency key.
-- **No configuration cache yet.** Each request reads the current settings from SQL. This keeps updates straightforward. caching would only be worth adding if measurements show a need.
+- **No configuration cache yet.** Each request reads the current settings from SQL. This keeps updates straightforward. Caching would only be worth adding if measurements show a need.
 - **SQL handles concurrent updates.** Rowversion prevents one administrator from silently overwriting another's changes.
 
 ## Current improvements
@@ -269,15 +271,14 @@ These changes are already part of the current version:
 - **Safer forwarding.** Only approved headers are sent. Credentials, cookies and hop-by-hop headers stay out, and redirects aren't followed.
 - **Better failure handling.** Upstream timeouts, broken connections and caller cancellation have separate outcomes. The timeout covers reading the response body too.
 - **More useful audit records.** The API saves an intent before sending, records the result afterwards, and doesn't mark a request as forwarded when the intent write fails. Destination updates also refresh their timestamps.
-- **Broader tests.** The tests check what the destination actually receives, including a real local HTTPS call and the 32-request concurrency limit.
+- **Broader tests.** The tests check what the destination actually receives, including a real local HTTPS call and the 32-request concurrency limit. CI also runs the SQL integration tests and a full SQL-backed HTTPS check.
 
 ## Future improvements
 
 If I take this further, I'd focus on these next:
 
-- **Keep SQL checks in CI.** Run the SQL integration tests and the full HTTPS smoke check on every change so database behavior stays covered.
 - **Add permissions per caller.** Replace the shared API keys with an identity provider and control which operations each caller can use.
-- **Move keys to a secret manager.** The key-source interface is already there. the next step is managed storage and a clear rotation process.
+- **Move keys to a secret manager.** The key-source interface is already there. The next step is managed storage and a clear rotation process.
 - **Handle destination outages better.** Add limits and a circuit breaker per destination, without introducing retries that could duplicate a POST.
 - **Improve monitoring.** Track latency, rejection rates and unfinished audit records, with alerts when something needs attention.
 - **Measure before tuning.** Run load tests, then decide whether configuration caching or a different response streaming approach is needed.
