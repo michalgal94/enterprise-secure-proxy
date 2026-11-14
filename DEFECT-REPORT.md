@@ -4,11 +4,12 @@ These are the issues fixed during development, along with the tests or checks th
 
 ## Fixed issues
 
-- **Missing or invalid encryption keys were treated like bad caller data**
+- **Missing or invalid encryption keys were treated like bad   caller data**
 
   **Fix:** Return 503 for key configuration problems, and 400 for invalid encrypted input
 
   **Check:** Missing_or_invalid_secret_is_a_service_failure; invalid-encryption tests
+
 
 - **A broken upstream response body returned a generic 503**
 
@@ -16,11 +17,13 @@ These are the issues fixed during development, along with the tests or checks th
 
   **Check:** Broken_upstream_body_is_a_gateway_failure
 
+
 - **Malformed admin JSON could return 503**
 
   **Fix:** Keep the correct client-error status when request binding fails
 
   **Check:** Malformed_admin_requests_return_client_errors
+
 
 - **An allowlisted header could still be hop-by-hop if named in Connection**
 
@@ -28,11 +31,13 @@ These are the issues fixed during development, along with the tests or checks th
 
   **Check:** Connection_nominated_headers_are_not_forwarded
 
+
 - **Destination UpdatedAt was not refreshed on changes**
 
   **Fix:** Update the timestamp on tracked changes and preserve CreatedAt
 
   **Check:** Destination_update_preserves_creation_time_and_refreshes_update_time
+
 
 - **Audit admission had no application-level deadline**
 
@@ -40,11 +45,13 @@ These are the issues fixed during development, along with the tests or checks th
 
   **Check:** Admission-failure test and executor deadline
 
+
 - **Upstream HTTP errors had no audit reason code**
 
   **Fix:** Save upstream_http_error alongside the status and outcome
 
   **Check:** Upstream_error_preserves_status_and_hides_sensitive_body
+
 
 - **Forwarded was set before the dispatch-intent write could fail**
 
@@ -52,11 +59,13 @@ These are the issues fixed during development, along with the tests or checks th
 
   **Check:** Dispatch_intent_failure_does_not_claim_forwarding_or_send
 
+
 - **A crash or completion-write failure could leave the forwarding result unclear**
 
   **Fix:** Keep the durable Dispatching record and document that unfinished attempts need reconciliation
 
   **Check:** Audit_completion_failure_leaves_durable_dispatch_intent
+
 
 - **The HTTPS test certificate failed with Windows Schannel**
 
@@ -64,11 +73,13 @@ These are the issues fixed during development, along with the tests or checks th
 
   **Check:** NetworkTests
 
+
 - **The shared demo identity couldn't distinguish real callers or restrict their operations**
 
   **Fix:** Add JWT validation, enabled caller records and explicit operation grants, with no demo-key fallback in JWT mode
 
   **Check:** CallerSecurityTests; SQL grant-revocation checks
+
 
 - **A SQL identity lookup could accept a case or trailing-space variant of a subject**
 
@@ -76,11 +87,13 @@ These are the issues fixed during development, along with the tests or checks th
 
   **Check:** Real_SQL_persists_success_and_rejection_audits
 
+
 - **Bounded concurrency alone didn't limit request volume over time**
 
   **Fix:** Add a fixed-window quota per authenticated subject while retaining the shared concurrency cap
 
   **Check:** Rate_limits_are_separate_for_each_authenticated_caller; concurrency saturation test
+
 
 - **Repeated destination failures continued to use network resources**
 
@@ -88,11 +101,13 @@ These are the issues fixed during development, along with the tests or checks th
 
   **Check:** ResilienceAndCacheTests; Open_circuit_is_audited_without_claiming_or_attempting_dispatch; standalone SQL smoke
 
+
 - **Errors from management and unknown routes didn't all use the same public contract**
 
   **Fix:** Use the same safe code/correlationId shape at each HTTP boundary
 
   **Check:** Public_errors_have_the_same_safe_contract
+
 
 - **Optional caching needed defined invalidation and a stale-load safeguard**
 
@@ -100,11 +115,13 @@ These are the issues fixed during development, along with the tests or checks th
 
   **Check:** ResilienceAndCacheTests; Grant_revocation_applies_even_when_operation_configuration_is_cached
 
+
 - **Execution telemetry didn't include metrics, spans or administrator identity**
 
   **Fix:** Add bounded metric tags, activity spans, JSON console output and actor-aware configuration history
 
   **Check:** Execution_emits_metrics_and_links_its_trace_to_the_audit; Admin_update_invalidates_local_cache_and_records_the_actor
+
 
 ## Security checks
 
